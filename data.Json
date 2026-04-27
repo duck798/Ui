@@ -1,0 +1,42 @@
+import pandas as pd
+import json
+
+def process_file(file_path, exam_name):
+    try:
+        # Ông thay đổi tên cột 'Họ và tên', 'Ngày sinh' cho khớp với file thật nhé
+        df = pd.read_csv(file_path)
+        records = []
+        for _, row in df.iterrows():
+            # Lọc chỉ lấy các môn có điểm (bỏ qua giá trị rỗng/NaN)
+            scores = {k: float(v) for k, v in row.items() if k not in ['Họ và tên', 'Ngày sinh'] and pd.notna(v)}
+            records.append({
+                'name': str(row['Họ và tên']).strip().toLowerCase(),
+                'dob': str(row['Ngày sinh']).strip(),
+                'exam': exam_name,
+                'scores': scores
+            })
+        return records
+    except Exception as e:
+        print(f"Lỗi đọc {file_path}: {e}")
+        return []
+
+all_data = {"HungHoa": {}, "TamNong": {}}
+
+def merge_data(school, records):
+    for r in records:
+        key = f"{r['name']}_{r['dob']}"
+        if key not in all_data[school]:
+            all_data[school][key] = {'name': r['name'].title(), 'dob': r['dob'], 'exams': {}}
+        all_data[school][key]['exams'][r['exam']] = r['scores']
+
+# Xử lý các đợt thi
+merge_data("HungHoa", process_file('so1.csv', 'Sở đợt 1'))
+merge_data("HungHoa", process_file('truong.csv', 'Trường'))
+merge_data("HungHoa", process_file('so2.csv', 'Sở đợt 2'))
+merge_data("TamNong", process_file('so2tamnong.csv', 'Sở đợt 2'))
+
+# Xuất ra file JSON cho website
+with open('data.json', 'w', encoding='utf-8') as f:
+    json.dump(all_data, f, ensure_ascii=False, indent=2)
+print("Đã tạo xong file data.json!")
+          
