@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tra Cứu & Phân Tích Điểm Khảo Sát</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #f4f7f6; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, select, button { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 16px; }
+        button { background-color: #007bff; color: white; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button:hover { background-color: #0056b3; }
+        .alert { background: #ffe6e6; color: #d9534f; padding: 10px; border-radius: 5px; }
+        .suggestions { background: #e9f5ff; padding: 15px; border-radius: 5px; margin-top: 15px; }
+        ul { margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2 style="text-align: center; color: #333;">Tra Cứu Khảo Sát THPT</h2>
+        <select id="school">
+            <option value="HungHoa">THPT Hưng Hóa</option>
+            <option value="TamNong">THPT Tam Nông</option>
+        </select>
+        <input type="text" id="studentName" placeholder="Nhập họ và tên (VD: Nguyễn Văn A)">
+        <input type="text" id="dob" placeholder="Nhập ngày sinh (VD: 01/01/2006)">
+        <button onclick="searchData()">Tra Cứu & Phân Tích</button>
+    </div>
+
+    <div id="result" style="display: none;"></div>
+
+    <script>
+        let db = {};
+        
+        // Tải dữ liệu JSON
+        fetch('data.json').then(res => res.json()).then(data => { db = data; });
+
+        function searchData() {
+            const school = document.getElementById('school').value;
+            const name = document.getElementById('studentName').value.trim().toLowerCase();
+            const dob = document.getElementById('dob').value.trim();
+            const resDiv = document.getElementById('result');
+
+            if (!name || !dob) { 
+                alert("Ông nhắc học sinh nhập đủ tên và ngày sinh nhé!"); 
+                return; 
+            }
+
+            const key = `${name}_${dob}`;
+            const student = db[school][key];
+
+            if (!student) {
+                resDiv.style.display = 'block';
+                resDiv.innerHTML = `<div class="card alert">Không tìm thấy dữ liệu! Kiểm tra lại trường, tên hoặc ngày sinh.</div>`;
+                return;
+            }
+
+            let html = `<div class="card"><h3 style="color: #007bff;">Học sinh: ${student.name} - ${student.dob}</h3>`;
+            
+            // 1. Lịch sử điểm thi linh hoạt theo môn thực thi
+            html += `<h4>📊 Lịch sử điểm các đợt thi:</h4>`;
+            const exams = student.exams;
+            const examNames = Object.keys(exams);
+            
+            examNames.forEach(exam => {
+                html += `<b>${exam}:</b> <ul>`;
+                for (let subject in exams[exam]) {
+                    html += `<li>${subject}: ${exams[exam][subject]}</li>`;
+                }
+                html += `</ul>`;
+            });
+
+            // 2. Nhận xét xu hướng
+            if (examNames.length > 1) {
+                const firstExam = exams[examNames[0]];
+                const lastExam = exams[examNames[examNames.length - 1]];
+                let trend = 0, count = 0;
+                for (let sub in lastExam) {
+                    if (firstExam[sub] !== undefined) {
+                        trend += (lastExam[sub] - firstExam[sub]);
+                        count++;
+                    }
+                }
+                const diff = count > 0 ? (trend/count).toFixed(2) : 0;
+                let comment = diff > 0 ? "Tuyệt vời, phong độ đang đi lên! 🚀" : (diff < 0 ? "Điểm đang chững lại, cần cố gắng tăng tốc nhé! ⚠️" : "Phong độ ổn định, hãy bứt phá ở kỳ tới!");
+                html += `<div style="padding: 10px; border-left: 4px solid #007bff; background: #f8f9fa;">
+                            <b>Nhận xét chung:</b> Trung bình điểm thay đổi ${diff > 0 ? '+'+diff : diff} điểm so với đợt đầu. ${comment}
+                         </div>`;
+            }
+
+            // 3. Phân tích khối thi
+            const latestScores = exams[examNames[examNames.length - 1]];
+            const blocks = {
+                'A00 (Toán, Lý, Hóa)': ['Toán', 'Vật lý', 'Hóa học'],
+                'A01 (Toán, Lý, Anh)': ['Toán', 'Vật lý', 'Tiếng Anh'],
+                'B00 (Toán, Hóa, Sinh)': ['Toán', 'Hóa học', 'Sinh học'],
+                'C00 (Văn, Sử, Địa)': ['Ngữ văn', 'Lịch sử', 'Địa lý'],
+                'D01 (Toán, Văn, Anh)': ['Toán', 'Ngữ văn', 'Tiếng Anh']
+            };
+
+            let maxScore = 0;
+            let bestBlock = "";
+
+            for (let b in blocks) {
+                let score = 0, valid = true;
+                blocks[b].forEach(sub => {
+                    let subScore = latestScores[sub] || latestScores[sub.toLowerCase()]; // Khớp tên cột
+                    if (subScore === undefined) valid = false;
+                    else score += parseFloat(subScore);
+                });
+                if (valid && score > maxScore) { maxScore = score; bestBlock = b; }
+            }
+
+            // 4. Gợi ý trường
+            if (maxScore > 0) {
+                html += `<div class="suggestions"><h4>🎓 Phân tích tư vấn hướng nghiệp:</h4>`;
+                html += `<p>Tổ hợp xét tuyển tối ưu nhất hiện tại: <b>${bestBlock}</b> với tổng điểm: <b style="color:red; font-size: 18px;">${maxScore.toFixed(2)}</b>.</p>`;
+                html += `<b>Gợi ý nhóm trường phù hợp tham khảo (10 - 12 trường đa dạng):</b><ul>`;
+                const uni = getUniversities(maxScore);
+                uni.forEach(u => html += `<li>${u}</li>`);
+                html += `</ul></div>`;
+            }
+
+            html += `</div>`;
+            resDiv.innerHTML = html;
+            resDiv.style.display = 'block';
+        }
+
+        // Logic nhóm trường
+        function getUniversities(score) {
+            if (score >= 26) return ["Đại học Bách Khoa Hà Nội (Khối Kỹ thuật)", "Đại học Ngoại Thương", "Đại học Kinh tế Quốc dân", "Đại học Y Hà Nội", "ĐH Công nghệ - ĐHQGHN", "Học viện Tài chính", "Học viện Ngoại giao", "Đại học Dược Hà Nội", "Học viện Cảnh sát/An ninh", "Đại học Sư phạm Hà Nội (Ngành top)"];
+            if (score >= 23) return ["Học viện Công nghệ Bưu chính Viễn thông", "Đại học Thương Mại", "ĐH Khoa học Tự nhiên - ĐHQGHN", "Đại học Giao thông Vận tải", "ĐH KHXH&NV - ĐHQGHN", "Đại học Công nghiệp Hà Nội", "Đại học Kiến trúc Hà Nội", "Đại học Xây dựng", "Học viện Ngân hàng", "ĐH Kinh tế Kỹ thuật Công nghiệp", "Học viện Báo chí & Tuyên truyền"];
+            if (score >= 20) return ["Đại học Thủy Lợi", "Đại học Mỏ - Địa chất", "Học viện Nông nghiệp VN", "ĐH Tài nguyên & Môi trường", "Đại học Điện lực", "Đại học Công Đoàn", "Đại học Văn hóa Hà Nội", "Đại học Mở Hà Nội", "Đại học Phenikaa", "Đại học Thăng Long", "Đại học Lâm nghiệp"];
+            return ["Đại học Nông lâm Bắc Giang", "Đại học Kinh doanh & Công nghệ", "Đại học Đại Nam", "Đại học Phương Đông", "Đại học FPT (hệ xét học bạ)", "CĐ Kinh tế Kỹ thuật Thương mại", "CĐ Công nghệ cao Hà Nội", "CĐ FPT Polytechnic", "Trường Sĩ quan Pháo binh (Tùy điều kiện)", "Các hệ Cao đẳng Nghề chất lượng cao..."];
+        }
+    </script>
+</body>
+</html>
